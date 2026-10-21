@@ -1,0 +1,54 @@
+{
+  "name": "mprotect-native",
+  "version": "0.0.0",
+  "description": "Guarded, access controlled memory for secrets",
+  "exports": {
+    "./package": "./package.json",
+    ".": "./index.js"
+  },
+  "files": [
+    "index.js",
+    "binding.c",
+    "binding.js",
+    "CMakeLists.txt",
+    "prebuilds"
+  ],
+  "addon": true,
+  "scripts": {
+    "format": "prettier --write . && lunte --fix",
+    "lint": "prettier --check . && lunte",
+    "test": "npm run test:bare && npm run test:node",
+    "test:bare": "brittle-bare test/*.js",
+    "test:node": "brittle-node test/*.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/holepunchto/mprotect-native.git"
+  },
+  "author": "Holepunch",
+  "license": "Apache-2.0",
+  "bugs": {
+    "url": "https://github.com/holepunchto/mprotect-native/issues"
+  },
+  "homepage": "https://github.com/holepunchto/mprotect-native#readme",
+  "engines": {
+    "bare": ">=1.4.0"
+  },
+  "dependencies": {
+    "require-addon": "^1.0.2"
+  },
+  "devDependencies": {
+    "bare-compat-napi": "^1.0.0",
+    "bare-inspect": "^3.0.0",
+    "bare-subprocess": "^5.0.0",
+    "brittle": "^3.4.0",
+    "cmake-bare": "^1.1.15",
+    "cmake-fetch": "^1.2.0",
+    "cmake-napi": "^1.0.7",
+    "cmake-npm": "^1.0.2",
+    "lunte": "^1.8.0",
+    "prettier": "^3.4.2",
+    "prettier-config-holepunch": "^2.0.0",
+    "which-runtime": "^1.2.0"
+  }
+}
