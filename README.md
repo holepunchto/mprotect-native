@@ -36,11 +36,17 @@ Call `fn(view)` with the memory readable and return its result. If `fn` returns 
 
 Like `m.read()`, but with the memory readable and writable.
 
-Scopes nest and may overlap: the memory is writable while any `write()` scope is open, readable while any `read()` scope is open, and returns to its previous state once all have closed.
+Scopes work like a semaphore that never waits. Any number of `read()` scopes may hold the memory at once, while a `write()` scope holds it exclusively. Opening a scope that conflicts with one already held throws an error with `code: 'LOCKED'`, so a write inside a read, or a read or write inside a write, is an error rather than a deadlock. Once every scope has closed, the memory returns to its previous state.
+
+An async scope holds the memory until its promise settles, which is what lets work such as `crypto_pwhash_async()` read it from another thread:
+
+```js
+await password.read((view) => sodium.crypto_pwhash_async(hash, view, salt, ops, mem, alg))
+```
 
 #### `m.noaccess()`, `m.readonly()`, `m.readwrite()`
 
-Set the access outside of any scope, for when access must span code that cannot be wrapped in a callback. Access is then through `m.view`.
+Set the access outside of any scope, for when access must span code that cannot be wrapped in a callback. Access is then through `m.view`. Throws with `code: 'LOCKED'` while a scope holds the memory.
 
 #### `m.view`
 
@@ -48,7 +54,7 @@ A `Uint8Array` over the memory. It is only accessible while the memory is readab
 
 #### `m.free()`
 
-Zero and release the memory. Every view is detached and has length 0 afterwards. Calling it again does nothing. Memory that becomes unreachable is also freed on garbage collection, but freeing explicitly releases the secret straight away.
+Zero and release the memory. Every view is detached and has length 0 afterwards. Calling it again does nothing. Throws with `code: 'LOCKED'` while a scope holds the memory, as that scope may still be using it. Memory that becomes unreachable is also freed on garbage collection, but freeing explicitly releases the secret straight away.
 
 #### `m.byteLength`
 

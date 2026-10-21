@@ -17,7 +17,7 @@ class SecureMemory {
   #byteLength
   #base = NOACCESS
   #readers = 0
-  #writers = 0
+  #writing = false
 
   constructor(byteLength) {
     if (!Number.isSafeInteger(byteLength) || byteLength < 0) {
@@ -79,19 +79,28 @@ class SecureMemory {
 
   free() {
     if (this.freed) return
+    this.#assertNotHeld()
     binding.free(this.#handle, this.#view.buffer)
   }
 
   #setBase(state) {
     this.#assertNotFreed()
+    this.#assertNotHeld()
     this.#base = state
     this.#update()
   }
 
+  // Readers share the memory and a writer has it exclusively. Taking it never
+  // waits: a conflicting scope throws, which also turns nesting into an error
+  // rather than a deadlock.
   #scope(fn, write) {
     this.#assertNotFreed()
 
-    if (write) this.#writers++
+    if (this.#writing || (write && this.#readers > 0)) {
+      throw locked('Memory is already held by ' + (this.#writing ? 'a write' : 'a read'))
+    }
+
+    if (write) this.#writing = true
     else this.#readers++
 
     let async = false
@@ -123,16 +132,16 @@ class SecureMemory {
   }
 
   #exit(write) {
-    if (write) this.#writers--
+    if (write) this.#writing = false
     else this.#readers--
 
-    if (!this.freed) this.#update()
+    this.#update()
   }
 
   #update() {
     let state = this.#base
 
-    if (this.#writers > 0) state = READWRITE
+    if (this.#writing) state = READWRITE
     else if (this.#readers > 0 && state === NOACCESS) state = READONLY
 
     binding.protect(this.#handle, state)
@@ -142,6 +151,10 @@ class SecureMemory {
     if (this.freed) throw new Error('Memory has been freed')
   }
 
+  #assertNotHeld() {
+    if (this.#writing || this.#readers > 0) throw locked('Memory is held by a scope')
+  }
+
   toJSON() {
     return { byteLength: this.byteLength, state: this.state }
   }
@@ -149,6 +162,12 @@ class SecureMemory {
   [Symbol.for('nodejs.util.inspect.custom')]() {
     return `SecureMemory { byteLength: ${this.byteLength}, state: '${this.state}', locked: ${this.locked} }`
   }
+}
+
+function locked(msg) {
+  const err = new Error(msg)
+  err.code = 'LOCKED'
+  return err
 }
 
 exports.SecureMemory = SecureMemory

@@ -59,22 +59,44 @@ test('scopes expose their state and return the callback result', (t) => {
   m.free()
 })
 
-test('nested scopes', (t) => {
+test('reads share the memory', (t) => {
   const m = mem.alloc(4)
 
   m.write((view) => {
-    m.read(() => t.is(m.state, 'readwrite', 'read inside write keeps write access'))
     view[0] = 1
   })
 
-  m.read(() => {
-    m.write((view) => {
-      view[0] = 2
-    })
-    t.is(m.state, 'readonly', 'leaving inner write restores read access')
-  })
-
+  t.is(
+    m.read((a) => m.read((b) => a[0] + b[0])),
+    2
+  )
   t.is(m.state, 'noaccess')
+
+  m.free()
+})
+
+test('a write is exclusive', (t) => {
+  const m = mem.alloc(4)
+
+  t.exception(() => m.read(() => m.write(() => {})), /held by a read/)
+  t.exception(() => m.write(() => m.read(() => {})), /held by a write/)
+  t.exception(() => m.write(() => m.write(() => {})), /held by a write/)
+  t.is(m.state, 'noaccess', 'every scope was released')
+
+  try {
+    m.write(() => m.write(() => {}))
+  } catch (err) {
+    t.is(err.code, 'LOCKED')
+  }
+
+  m.write((view) => {
+    view[0] = 1
+  })
+  t.is(
+    m.read((view) => view[0]),
+    1,
+    'memory is usable again'
+  )
 
   m.free()
 })
@@ -117,22 +139,36 @@ test('async scope stays open until the promise settles', async (t) => {
   m.free()
 })
 
-test('interleaved async scopes', async (t) => {
+test('async scopes hold the memory until they settle', async (t) => {
   const m = mem.alloc(4)
 
   let release
   const reading = m.read(() => new Promise((resolve) => (release = resolve)))
 
-  await m.write((view) => {
-    view[0] = 1
-    return Promise.resolve()
-  })
-
-  t.is(m.state, 'readonly', 'outstanding read keeps read access after write ends')
+  t.is(
+    m.read(() => m.state),
+    'readonly',
+    'another read can share'
+  )
+  t.exception(() => m.write(() => {}), /held by a read/)
 
   release()
   await reading
 
+  const writing = m.write((view) => {
+    view[0] = 1
+    return new Promise((resolve) => (release = resolve))
+  })
+
+  t.exception(() => m.read(() => {}), /held by a write/)
+
+  release()
+  await writing
+
+  t.is(
+    m.read((view) => view[0]),
+    1
+  )
   t.is(m.state, 'noaccess')
 
   m.free()
@@ -177,11 +213,22 @@ test('free', (t) => {
   t.exception(() => m.readonly(), /freed/)
 })
 
-test('free inside a scope', (t) => {
+test('free and manual access are refused while a scope holds the memory', async (t) => {
   const m = mem.alloc(4)
 
-  m.write(() => m.free())
+  t.exception(() => m.write(() => m.free()), /held by a scope/)
+  t.exception(() => m.read(() => m.readwrite()), /held by a scope/)
 
+  let release
+  const reading = m.read(() => new Promise((resolve) => (release = resolve)))
+
+  t.exception(() => m.free(), /held by a scope/)
+  t.is(m.state, 'readonly')
+
+  release()
+  await reading
+
+  m.free()
   t.is(m.state, 'freed')
 })
 
