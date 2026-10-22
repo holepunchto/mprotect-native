@@ -111,9 +111,7 @@ class SecureMemory {
       const result = fn(this.#view)
 
       if (result !== null && typeof result === 'object' && typeof result.then === 'function') {
-        async = true
-
-        return result.then(
+        const settled = result.then(
           (value) => {
             this.#exit(write)
             return value
@@ -123,6 +121,12 @@ class SecureMemory {
             throw err
           }
         )
+
+        // Only once the chain exists: a thenable whose then() throws must
+        // still release the scope through the finally below
+        async = true
+
+        return settled
       }
 
       return result

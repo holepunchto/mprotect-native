@@ -3,6 +3,7 @@
 #include <errno.h>
 #include <js.h>
 #include <mprotect.h>
+#include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -106,10 +107,24 @@ mprotect_native_alloc(js_env_t *env, js_callback_info_t *info) {
     assert(err == 0);
   } else {
     // Fails in runtimes that forbid external array buffers, such as Electron
-    // with the V8 sandbox enabled. The pending exception propagates and the
-    // handle finalizer releases the memory.
+    // with the V8 sandbox enabled. Node reports that as a status without a
+    // pending exception, so raise one and release the memory now rather than
+    // leaving it locked until the handle is collected.
     err = js_create_external_arraybuffer(env, m->data, m->len, NULL, NULL, &arraybuffer);
-    if (err < 0) return NULL;
+
+    if (err < 0) {
+      bool pending;
+      err = js_is_exception_pending(env, &pending);
+      assert(err == 0);
+
+      if (!pending) {
+        mprotect_free(m);
+
+        js_throw_error(env, "ENOTSUP", "External array buffers are not supported by this runtime");
+      }
+
+      return NULL;
+    }
   }
 
   js_value_t *result;

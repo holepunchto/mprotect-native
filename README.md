@@ -52,6 +52,8 @@ Set the access outside of any scope, for when access must span code that cannot 
 
 A `Uint8Array` over the memory. It is only accessible while the memory is readable, so only use it inside a scope or after `m.readonly()` or `m.readwrite()`, and do not log or inspect it while inaccessible. A view, or any view derived from it, keeps the memory allocated for as long as it is reachable.
 
+Never transfer `m.view.buffer` to a worker (`postMessage` with a transfer list, or `structuredClone` with `transfer`). The transferred buffer no longer keeps the memory allocated, so once `m` is freed or collected it points at unmapped memory. Copy the bytes out inside a scope instead.
+
 #### `m.free()`
 
 Zero and release the memory. Every view is detached and has length 0 afterwards. Calling it again does nothing. Throws with `code: 'LOCKED'` while a scope holds the memory, as that scope may still be using it. Memory that becomes unreachable is also freed on garbage collection, but freeing explicitly releases the secret straight away.
@@ -76,7 +78,7 @@ Inspecting or serialising `m` itself is safe and never touches the memory.
 
 ## Caveats
 
-External array buffers are required, so the module does not work in runtimes that forbid them, such as Electron with the V8 sandbox enabled.
+External array buffers are required, so the module does not work in runtimes that forbid them, such as Electron with the V8 sandbox enabled. There `alloc()` throws an error with `code: 'ENOTSUP'`.
 
 ## License
 

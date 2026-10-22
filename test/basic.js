@@ -139,6 +139,27 @@ test('async scope stays open until the promise settles', async (t) => {
   m.free()
 })
 
+test('a thenable whose then() throws still releases the scope', (t) => {
+  const m = mem.alloc(4)
+
+  t.exception(
+    () =>
+      m.read(() => ({
+        then() {
+          throw new Error('boom')
+        }
+      })),
+    /boom/
+  )
+
+  t.is(m.state, 'noaccess')
+  m.write((view) => {
+    view[0] = 1
+  })
+  m.free()
+  t.is(m.state, 'freed')
+})
+
 test('async scopes hold the memory until they settle', async (t) => {
   const m = mem.alloc(4)
 
