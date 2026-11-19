@@ -1,6 +1,6 @@
 {
   "name": "mprotect-native",
-  "version": "0.0.0",
+  "version": "1.0.0",
   "description": "Guarded, access controlled memory for secrets",
   "exports": {
     "./package": "./package.json",
